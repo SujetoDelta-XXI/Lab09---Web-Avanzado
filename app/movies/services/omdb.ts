@@ -2,209 +2,145 @@ import axios from 'axios';
 import { Movie, MovieDetails, TMDBResponse, OMDBSearchResponse, OMDBMovie } from '../types';
 import { mockResponse, mockMovieDetails, mockMovies } from './mockData';
 
-const API_KEY = process.env.NEXT_PUBLIC_OMDB_API_KEY || 'demo_key';
-const BASE_URL = 'https://www.omdbapi.com';
+// ✅ Configuración de la API
+const API_KEY = process.env.NEXT_PUBLIC_OMDB_API_KEY || '460854f2';
+const BASE_URL = 'https://www.omdbapi.com/';
 
-// Cliente axios configurado
+// Cliente Axios configurado correctamente
 const omdbClient = axios.create({
   baseURL: BASE_URL,
   params: {
-    apikey: API_KEY
-  }
+    apikey: API_KEY,
+  },
 });
 
-// Verificar si la API key está configurada
-if (API_KEY === 'demo_key') {
-  console.warn('⚠️  OMDB API key no configurada. Por favor configura NEXT_PUBLIC_OMDB_API_KEY en .env.local');
+// ⚠️ Advertencia si no hay API key configurada
+if (!process.env.NEXT_PUBLIC_OMDB_API_KEY) {
+  console.warn('⚠️  No se encontró NEXT_PUBLIC_OMDB_API_KEY. Usando clave por defecto.');
 }
 
-// Función para normalizar películas de OMDB a nuestro formato
+// 🔄 Normaliza los datos del API OMDB al formato Movie
 function normalizeMovie(omdbMovie: OMDBMovie): Movie {
   return {
     id: omdbMovie.imdbID,
     title: omdbMovie.Title,
-    overview: `Película del año ${omdbMovie.Year}`, // OMDB no tiene overview en búsquedas
+    overview: `Película del año ${omdbMovie.Year}`,
     poster_path: omdbMovie.Poster !== 'N/A' ? omdbMovie.Poster : null,
     release_date: omdbMovie.Year,
-    vote_average: 0, // Se obtiene en detalles
+    vote_average: 0,
     year: omdbMovie.Year,
-    imdbID: omdbMovie.imdbID
+    imdbID: omdbMovie.imdbID,
   };
 }
 
-// Servicio para obtener películas populares (usando búsqueda de Marvel como ejemplo)
+// 🎬 Obtener películas populares (simulación con palabras clave)
 export async function getPopularMovies(page: number = 1): Promise<TMDBResponse> {
-  // Si no hay API key válida, usar datos de ejemplo
-  if (API_KEY === 'demo_key') {
-    console.log('🎬 Usando datos de ejemplo (configura tu API key de OMDB para datos reales)');
-    return Promise.resolve(mockResponse);
-  }
-
   try {
-    // OMDB no tiene endpoint de "populares", usamos búsquedas predefinidas
     const popularSearches = ['marvel', 'star wars', 'batman', 'superman', 'spider'];
     const searchTerm = popularSearches[Math.floor(Math.random() * popularSearches.length)];
-    
+
+    console.log(`🔎 Cargando películas populares: ${searchTerm}`);
+
     const response = await omdbClient.get<OMDBSearchResponse>('/', {
-      params: { 
-        s: searchTerm,
-        page: page,
-        type: 'movie'
-      }
+      params: { s: searchTerm, page, type: 'movie' },
     });
 
     if (response.data.Response === 'False') {
-      // Si no hay resultados, usar datos de ejemplo
+      console.warn('⚠️ Sin resultados, usando mockResponse');
       return mockResponse;
     }
 
     const normalizedMovies = response.data.Search.map(normalizeMovie);
 
     return {
-      page: page,
+      page,
       results: normalizedMovies,
       total_pages: Math.ceil(parseInt(response.data.totalResults) / 10),
-      total_results: parseInt(response.data.totalResults)
+      total_results: parseInt(response.data.totalResults),
     };
   } catch (error: any) {
-    console.error('Error fetching popular movies:', error);
-    
-    if (error.response?.status === 401) {
-      console.log('🎬 API key inválida, usando datos de ejemplo');
-      return mockResponse;
-    }
-    
-    // En caso de cualquier error, usar datos de ejemplo
+    console.error('❌ Error al obtener películas populares:', error.message);
     return mockResponse;
   }
 }
 
-// Servicio para buscar películas
+// 🔍 Buscar películas
 export async function searchMovies(query: string, page: number = 1): Promise<TMDBResponse> {
-  // Si no hay API key válida, filtrar datos de ejemplo
-  if (API_KEY === 'demo_key') {
-    const filteredMovies = mockMovies.filter(movie => 
-      movie.title.toLowerCase().includes(query.toLowerCase()) ||
-      movie.overview.toLowerCase().includes(query.toLowerCase())
-    );
-    
-    return Promise.resolve({
-      page: 1,
-      results: filteredMovies,
-      total_pages: 1,
-      total_results: filteredMovies.length
-    });
+  if (!query.trim()) {
+    return { page: 1, results: [], total_pages: 0, total_results: 0 };
   }
 
   try {
+    console.log(`🔎 Buscando películas con query: "${query}"`);
+
     const response = await omdbClient.get<OMDBSearchResponse>('/', {
-      params: { 
-        s: query,
-        page: page,
-        type: 'movie'
-      }
+      params: { s: query.trim(), page, type: 'movie' },
     });
 
     if (response.data.Response === 'False') {
+      console.log('ℹ️ Sin resultados en OMDB.');
       return {
-        page: page,
+        page,
         results: [],
         total_pages: 0,
-        total_results: 0
+        total_results: 0,
       };
     }
 
     const normalizedMovies = response.data.Search.map(normalizeMovie);
 
+    console.log(`✅ ${normalizedMovies.length} resultados encontrados.`);
+
     return {
-      page: page,
+      page,
       results: normalizedMovies,
       total_pages: Math.ceil(parseInt(response.data.totalResults) / 10),
-      total_results: parseInt(response.data.totalResults)
+      total_results: parseInt(response.data.totalResults),
     };
   } catch (error: any) {
-    console.error('Error searching movies:', error);
-    
-    if (error.response?.status === 401) {
-      // Fallback a datos de ejemplo si la API key es inválida
-      const filteredMovies = mockMovies.filter(movie => 
-        movie.title.toLowerCase().includes(query.toLowerCase()) ||
-        movie.overview.toLowerCase().includes(query.toLowerCase())
-      );
-      
-      return {
-        page: 1,
-        results: filteredMovies,
-        total_pages: 1,
-        total_results: filteredMovies.length
-      };
-    }
-    
-    throw new Error('Error al buscar películas');
+    console.error('❌ Error al buscar películas:', error.message);
+
+    // Si la API falla, se devuelven datos simulados
+    const filteredMovies = mockMovies.filter((movie) =>
+      movie.title.toLowerCase().includes(query.toLowerCase())
+    );
+
+    return {
+      page: 1,
+      results: filteredMovies,
+      total_pages: 1,
+      total_results: filteredMovies.length,
+    };
   }
 }
 
-// Servicio para obtener detalles de una película
+// 🎞️ Obtener detalles de una película
 export async function getMovieDetails(movieId: string): Promise<MovieDetails> {
-  // Si no hay API key válida, usar datos de ejemplo
-  if (API_KEY === 'demo_key') {
-    const mockMovie = mockMovies.find(movie => movie.imdbID === movieId);
-    if (mockMovie) {
-      return Promise.resolve({
-        ...mockMovieDetails,
-        Title: mockMovie.title,
-        Year: mockMovie.year,
-        imdbID: mockMovie.imdbID,
-        Poster: mockMovie.poster_path || mockMovieDetails.Poster,
-        Plot: mockMovie.overview
-      });
-    }
-    return Promise.resolve(mockMovieDetails);
-  }
-
   try {
+    console.log(`📄 Cargando detalles de película ID: ${movieId}`);
+
     const response = await omdbClient.get<MovieDetails>('/', {
-      params: { 
-        i: movieId,
-        plot: 'full'
-      }
+      params: { i: movieId, plot: 'full' },
     });
 
     if (response.data.Response === 'False') {
-      // Fallback a datos de ejemplo
+      console.warn('⚠️ Detalles no disponibles, usando mockMovieDetails.');
       return mockMovieDetails;
     }
 
     return response.data;
   } catch (error: any) {
-    console.error('Error fetching movie details:', error);
-    
-    if (error.response?.status === 401) {
-      // Fallback a datos de ejemplo
-      const mockMovie = mockMovies.find(movie => movie.imdbID === movieId);
-      if (mockMovie) {
-        return {
-          ...mockMovieDetails,
-          Title: mockMovie.title,
-          Year: mockMovie.year,
-          imdbID: mockMovie.imdbID,
-          Poster: mockMovie.poster_path || mockMovieDetails.Poster,
-          Plot: mockMovie.overview
-        };
-      }
-      return mockMovieDetails;
-    }
-    
-    throw new Error('Error al cargar los detalles de la película');
+    console.error('❌ Error al obtener detalles:', error.message);
+    return mockMovieDetails;
   }
 }
 
-// Utilidades para imágenes
+// 🖼️ Utilidades para imágenes
 export function getImageUrl(path: string | null): string {
   if (!path || path === 'N/A') return '/placeholder-movie.svg';
-  return path; // OMDB devuelve URLs completas
+  return path;
 }
 
 export function getBackdropUrl(path: string | null): string {
-  return getImageUrl(path); // OMDB no tiene backdrops separados
+  return getImageUrl(path);
 }
